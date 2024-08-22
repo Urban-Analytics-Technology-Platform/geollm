@@ -1,0 +1,83 @@
+from typing import Union
+import uvicorn
+from fastapi import FastAPI, WebSocket
+from fastapi.responses import HTMLResponse
+import datetime
+from popgetter_llm_server import PopgetterAgent
+
+app = FastAPI()
+
+html = """
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Chat</title>
+    </head>
+    <body>
+        <h1>WebSocket Chat</h1>
+        <form action="" onsubmit="sendMessage(event)">
+            <input type="text" id="messageText" autocomplete="off"/>
+            <button>Send</button>
+        </form>
+        <ul id='messages'>
+        </ul>
+        <script>
+            var ws = new WebSocket("ws://localhost:8000/ws");
+            ws.onmessage = function(event) {
+                var messages = document.getElementById('messages')
+                var message = document.createElement('li')
+                var content = document.createTextNode(event.data)
+                message.appendChild(content)
+                messages.appendChild(message)
+            };
+            function sendMessage(event) {
+                var input = document.getElementById("messageText")
+                ws.send(input.value)
+                input.value = ''
+                event.preventDefault()
+            }
+        </script>
+    </body>
+</html>
+"""
+
+
+@app.get("/")
+def read_root():
+    return HTMLResponse(html)
+
+
+@app.get("/items/{item_id}")
+def read_item(item_id: int, q: Union[str, None] = None):
+    return {"item_id": item_id, "q": q}
+
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    agent = PopgetterAgent()
+    inital_message = {
+        "text": "Hi I am your helpful popgetter bot. Ask me questions to help search for population data.",
+        "isUser": False,
+        "timestamp": str(datetime.datetime.now()),
+    }
+    await websocket.send_json(inital_message)
+
+    while True:
+        prompt = await websocket.receive_json()
+        print("Got prompt ", prompt)
+        result = agent.query(prompt["text"])
+        print(result)
+
+        response = {
+            "text": result["output"],
+            "isUser": False,
+            "timestamp": str(datetime.datetime.now()),
+            "steps": [{"action": step[0].log} for step in result["intermediate_steps"]],
+        }
+        await websocket.send_json(response)
+
+
+if __name__ == "__main__":
+    agent = PopgetterAgent()
+    uvicorn.run(app, host="127.0.0.1", port=8000)
