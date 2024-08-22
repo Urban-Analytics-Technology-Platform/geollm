@@ -1,14 +1,14 @@
 from typing import Union
 from fastapi import FastAPI,WebSocket
 from fastapi.responses import HTMLResponse
-from demoland_agent import DemolandAgent 
-from demoland_agent.utils import load_scenario 
+from demoland_agent import DemolandAgent
+from demoland_agent.utils import load_scenario
 import datetime
 
 print("loading baseline")
-baseline  = load_scenario("../src/data/scenarios/baseline.json")
+baseline  = load_scenario("./data/baseline.json")
 print("loading sceanrio1")
-scenario1 = load_scenario("../src/data/scenarios/scenario3.json", baseline)
+scenario1 = load_scenario("./data/scenario1.json", baseline)
 
 app = FastAPI()
 
@@ -58,16 +58,16 @@ def read_item(item_id: int, q: Union[str, None] = None):
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     # print("Created agent")
-    
+
     await websocket.accept()
 
     agent = DemolandAgent(scenario1);
 
     inital_message= {
-        "text" : "Hi I am your helpful demoland bot. Ask me questions about the scenario you just ran!", 
-        "isUser": False, 
+        "text" : "Hi I am your helpful demoland bot. Ask me questions about the scenario you just ran!",
+        "isUser": False,
         "timestamp": str(datetime.datetime.now())
-    } 
+    }
 
     await websocket.send_json(inital_message)
 
@@ -78,9 +78,15 @@ async def websocket_endpoint(websocket: WebSocket):
         print(result)
 
         response = {
-            "text" : result["output"], 
-            "isUser": False, 
-            "timestamp": str(datetime.datetime.now()), 
+            "text" : result["output"],
+            "isUser": False,
+            "timestamp": str(datetime.datetime.now()),
             "steps": [ {"action":step[0].log} for step in result["intermediate_steps"]]
-        } 
+        }
         await websocket.send_json(response)
+
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="127.0.0.1", port=8000)
