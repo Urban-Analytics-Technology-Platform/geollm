@@ -1,12 +1,12 @@
 import os
 
 from dotenv import load_dotenv
-load_dotenv() 
+import numpy as np
+load_dotenv()
 from .utils import load_geography,load_regions, load_signatures,load_pen_portaits
 import geopandas as gp
-import pandas as pd 
-import langchain 
-langchain.debug = True 
+import pandas as pd
+import langchain
 from langchain.agents import tool
 from langchain_core.messages import AIMessage, HumanMessage
 import overpy
@@ -17,7 +17,8 @@ from langchain_experimental.tools.python.tool import PythonAstREPLTool
 
 overpass_api = overpy.Overpass()
 from langchain_community.tools.convert_to_openai import format_tool_to_openai_function
-from langchain_openai import ChatOpenAI
+
+from langchain_ollama import ChatOllama as ChatOpenAI
 from langchain.agents.format_scratchpad import format_to_openai_function_messages
 from langchain.agents.output_parsers import OpenAIFunctionsAgentOutputParser
 from langchain_experimental.agents.agent_toolkits import create_pandas_dataframe_agent
@@ -34,9 +35,9 @@ def PythonAstREPLTool_init_wrapper(self, *args, **kwargs):
 PythonAstREPLTool.__init__ = PythonAstREPLTool_init_wrapper
 
 
-print("Key ", os.environ["OPENAI_API_KEY"])
-print("Key 2 ",os.environ["OPEN_AI_KEY"])
-print("loading env ")
+# print("Key ", os.environ["OPENAI_API_KEY"])
+# print("Key 2 ",os.environ["OPEN_AI_KEY"])
+# print("loading env ")
 
 
 class ScenarioChangeAtPointSchema(BaseModel):
@@ -59,9 +60,9 @@ class DemolandAgent:
             [
                 (
                     "system",
-                    """You are very powerful geospatial assistant, but don't know current events. If asked about places physical locations you dont know, 
-                    for example schools, hospitals, grocery stores etc, use the find_points_of_interest tool to look them up. Make your responses conversational 
-                    as if you where reporting them in a talk. If asked to report changes only report non zero changes. 
+                    """You are very powerful geospatial assistant, but don't know current events. If asked about places physical locations you dont know,
+                    for example schools, hospitals, grocery stores etc, use the find_points_of_interest tool to look them up. Make your responses conversational
+                    as if you where reporting them in a talk. If asked to report changes only report non zero changes.
                     """,
                 ),
                 MessagesPlaceholder(variable_name=MEMORY_KEY),
@@ -70,9 +71,9 @@ class DemolandAgent:
             ]
         )
         self._prompt = prompt
-        
+
     def _construct_agent(self):
-        
+
         print("loading regions")
         regions = load_regions()
         print("loading signature descriptions")
@@ -93,27 +94,27 @@ class DemolandAgent:
 
 
         executor= create_pandas_dataframe_agent(
-            # ChatOpenAI(temperature=0, model="gpt-4"),
-            ChatOpenAI(temperature=0, model="gpt-4"),
+            ChatOpenAI(temperature=0, model="llama3.1"),
             self._scenario,
             verbose=True,
             agent_type=AgentType.OPENAI_FUNCTIONS,#,AgentType.ZERO_SHOT_REACT_DESCRIPTION,
             extra_tools= tools,
             handle_parsing_errors=True,
-            prefix="""You are very powerful geospatial assistant, but don't know current events. If asked about places physical locations you dont know, 
-                    for example schools, hospitals, grocery stores etc, use the find_points_of_interest tool to look them up. Make your responses conversational 
-                    as if you where reporting them in a talk. 
+            prefix="""You are very powerful geospatial assistant, but don't know current events. If asked about places physical locations you dont know,
+                    for example schools, hospitals, grocery stores etc, use the find_points_of_interest tool to look them up. Make your responses conversational
+                    as if you where reporting them in a talk.
 
                     If a dataframe has a geometry column, treat these as geopandas dataframes. IMD means index of multiple deprivation                    """,
-                        
-            return_intermediate_steps = True
+
+            return_intermediate_steps = True,
+            allow_dangerous_code=True,
         )
 
         print("prompts", executor.to_json())
-        
+
         # llm = ChatOpenAI(
         #                  # model="gpt-4",
-        #                  # model="gpt-3.5-turbo", 
+        #                  # model="gpt-3.5-turbo",
         #                  temperature=0
         #                  )
         # llm_with_tools = llm.bind(functions=[format_tool_to_openai_function(t) for t in tools])
@@ -154,19 +155,19 @@ class DemolandAgent:
                         node["amenity"="{ammenity_type}"]({bounds});
                         out body;
                 '''
-    
+
             result = overpass_api.query(query)
             features = []
             for node in result.nodes:
                 features.append([node.lon,node.lat,node.tags.get("name")])
-         
-            return pd.DataFrame(features, columns=["lon","lat","name"]).to_json()
 
-        @tool 
+            return pd.DataFrame(features, columns=np.array(["lon","lat","name"])).to_json()
+
+        @tool
         def signature_at_points(points):
             """Given a geojson object of points, return a geodataframe of the spatial signature of the region that contains each point"""
-            from io import StringIO  
-    
+            from io import StringIO
+
             points = gp.read_file(StringIO(json.dumps(points)))
 
             print("Points are ", points, type(points))
@@ -176,7 +177,7 @@ class DemolandAgent:
         @tool(args_schema=ScenarioChangeAtPointSchema)
         def scenario_change_at_point(points):
             """For the current scenario and an input list of points in geojson format, this function provides the changes in air pollution, house prices and access to greenspace for those points"""
-            from io import StringIO  
+            from io import StringIO
             print(points)
             points = json.loads(points)
             names =  [point["name"] for point in points]
@@ -188,7 +189,7 @@ class DemolandAgent:
             print("Change in point columns" ,result.columns)
             return result.drop(["geometry"], axis=1).to_markdown()
 
-        @tool 
+        @tool
         def signature_descriptions():
             """Returns the descriptions of each signature as json"""
             return sig_descriptions
@@ -204,11 +205,11 @@ class DemolandAgent:
             """Summarizes data in a geographic region. Should not be used for categories of location like resturants"""
             region_geo = regions[regions['name']==region]
             return gp.sjoin(region_geo,signatures)['type'].value_counts().to_csv()
-    
+
         @tool
         def get_spatial_signature_list():
             """Returns the names and counts of each spatial signature"""
-            return sig_types.to_csv()       
+            return sig_types.to_csv()
 
         tools = [
                  #summarize_in_region,
