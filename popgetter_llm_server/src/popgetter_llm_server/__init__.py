@@ -1,7 +1,7 @@
 from typing import Any, Tuple
 import pandas as pd
 from langchain.agents import tool
-from langchain_ollama import ChatOllama as ChatOpenAI
+from langchain_ollama import ChatOllama
 from langchain_experimental.agents.agent_toolkits import create_pandas_dataframe_agent
 from langchain.agents import AgentExecutor
 from langchain.agents.agent_types import AgentType
@@ -11,6 +11,7 @@ from langchain_community.tools.convert_to_openai import format_tool_to_openai_fu
 from langchain.agents.format_scratchpad import format_to_openai_function_messages
 from langchain_experimental.tools.python.tool import PythonAstREPLTool
 from langchain.agents.output_parsers import OpenAIFunctionsAgentOutputParser
+from langchain.agents import create_tool_calling_agent
 
 # See examples:
 # - https://python.langchain.com/v0.2/docs/how_to/tool_calling/
@@ -35,6 +36,7 @@ system_prompt = """
 If given a location or region is provided in the prompt, use the popgetter_tool
 tool to generate an answer. Only use tools to generate responses."
 """
+
 
 class PopgetterAgent:
     def __init__(self):
@@ -74,39 +76,46 @@ class PopgetterAgent:
         # print("prompts", executor.to_json())
 
         # Example agent
-        llm = ChatOpenAI(model="llama3.1",temperature=0)
-        llm_with_tools = llm.bind(functions=[format_tool_to_openai_function(t) for t in self.tools()])
-        agent = (
-            {
-                "input": lambda x: x["input"],
-                "agent_scratchpad": lambda x: format_to_openai_function_messages(
-                    x["intermediate_steps"]
-                ),
-                "chat_history": lambda x: x["chat_history"],
-            }
-            | self._prompt
-            | llm_with_tools
-            | OpenAIFunctionsAgentOutputParser()
+        # llm = ChatOpenAI(model="llama3.1", temperature=0)
+        llm = ChatOllama(model="llama3.2", temperature=0)
+        agent = create_tool_calling_agent(llm, self.tools(), self._prompt)
+
+        # The below agent fails to call tools
+        # agent = (
+        #     {
+        #         "input": lambda x: x["input"],
+        #         "agent_scratchpad": lambda x: format_to_openai_function_messages(
+        #             x["intermediate_steps"]
+        #         ),
+        #         "chat_history": lambda x: x["chat_history"],
+        #     }
+        #     | self._prompt
+        #     | llm_with_tools
+        #     | OpenAIFunctionsAgentOutputParser()
+        # )
+
+        executor = AgentExecutor(
+            agent=agent,
+            tools=self.tools(),
+            verbose=True,
+            return_intermediate_steps=True,
         )
-        executor = AgentExecutor(agent=agent, tools=self.tools(), verbose=True, return_intermediate_steps=True)
         self._executor = executor
 
     def query(self, query: str):
         result = self._executor.invoke(
             {"input": query, "chat_history": self._chat_history}
         )
-        print(result.keys())
         self._chat_history.extend(
             [HumanMessage(content=query), AIMessage(content=result["output"])]
         )
         return result
 
     def tools(self) -> list[Any]:
-        # @tool(return_direct=True)
         @tool
         def popgetter_tool(location: str) -> Tuple[float, float, float, float]:
             """Returns the bbox from a given location."""
             print(location)
-            return (0., 1., 2., 3.)
+            return (0.0, 1.0, 2.0, 3.0)
 
         return [popgetter_tool]
