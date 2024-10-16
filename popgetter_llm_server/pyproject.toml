@@ -1,0 +1,28 @@
+[project]
+dependencies = [
+    "fastapi>=0.112.1",
+    "uvicorn>=0.30.6",
+    "websockets>=13.0",
+    "langchain>=0.2.14",
+    "geopandas>=1.0.1",
+    "pandas>=2.2.2",
+    "langchain-openai>=0.1.22",
+    "ipython>=8.26.0",
+    "python-dotenv>=1.0.1",
+    "tabulate>=0.9.0",
+    "langchain-core>=0.2.19",
+    "langchain-ollama>=0.1.1",
+    "langchain-community>=0.2.12",
+    "langchain-experimental>=0.0.64",
+    "pyarrow>=17.0.0",
+    "fastparquet>=2024.5.0",
+]
+name = "popgetter-llm-server"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

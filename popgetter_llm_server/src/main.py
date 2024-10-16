@@ -1,14 +1,9 @@
 from typing import Union
-from fastapi import FastAPI,WebSocket
+import uvicorn
+from fastapi import FastAPI, WebSocket
 from fastapi.responses import HTMLResponse
-from demoland_agent import DemolandAgent
-from demoland_agent.utils import load_scenario
 import datetime
-
-print("loading baseline")
-baseline  = load_scenario("./data/baseline.json")
-print("loading sceanrio1")
-scenario1 = load_scenario("./data/scenario1.json", baseline)
+from popgetter_llm_server import PopgetterAgent
 
 app = FastAPI()
 
@@ -46,6 +41,7 @@ html = """
 </html>
 """
 
+
 @app.get("/")
 def read_root():
     return HTMLResponse(html)
@@ -55,20 +51,16 @@ def read_root():
 def read_item(item_id: int, q: Union[str, None] = None):
     return {"item_id": item_id, "q": q}
 
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    # print("Created agent")
-
     await websocket.accept()
-
-    agent = DemolandAgent(scenario1);
-
-    inital_message= {
-        "text" : "Hi I am your helpful demoland bot. Ask me questions about the scenario you just ran!",
+    agent = PopgetterAgent()
+    inital_message = {
+        "text": "Hi I am your helpful popgetter bot. Ask me questions to help search for population data.",
         "isUser": False,
-        "timestamp": str(datetime.datetime.now())
+        "timestamp": str(datetime.datetime.now()),
     }
-
     await websocket.send_json(inital_message)
 
     while True:
@@ -78,15 +70,14 @@ async def websocket_endpoint(websocket: WebSocket):
         print(result)
 
         response = {
-            "text" : result["output"],
+            "text": result["output"],
             "isUser": False,
             "timestamp": str(datetime.datetime.now()),
-            "steps": [ {"action":step[0].log} for step in result["intermediate_steps"]]
+            "steps": [{"action": step[0].log} for step in result["intermediate_steps"]],
         }
         await websocket.send_json(response)
 
 
-
 if __name__ == "__main__":
-    import uvicorn
+    agent = PopgetterAgent()
     uvicorn.run(app, host="127.0.0.1", port=8000)
